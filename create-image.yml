@@ -1,0 +1,46 @@
+---
+- name: Build Docker Image with Incremental Version
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    base_image: "my-docker-image"
+    version_file: "/opt/docker/version.txt"
+    dockerfile: "Dockerfile"
+    image_registry: "learncloud77"
+    image_name: "my-docker-image"
+    image_tag_prefix: "v"
+    playbook_dir: "/opt/docker"
+    new_image_: "{{ image_registry }}/{{ image_name }}:{{ image_tag_prefix }}"
+
+  tasks:
+    - name: Read current version from file
+      shell: cat "{{ version_file }}"
+      register: current_version
+      ignore_errors: true
+
+    - name: Increment version if file exists
+      set_fact:
+        version: "{{ (current_version.stdout|int + 1) if current_version.stdout else 1 }}"
+
+    - name: Write new version to file
+      copy:
+        content: "{{ version }}"
+        dest: "{{ version_file }}"
+
+    - name: Build Docker image
+      command: docker build -t "{{ new_image_ }}{{ version }}" --build-arg VERSION={{ version }} -f "{{ dockerfile }}" .
+      args:
+        chdir: "{{ playbook_dir }}"
+
+    - name: Create latest tag
+      command: docker image tag "{{ new_image_ }}{{ version }}" "{{ image_registry }}/{{ image_name }}:latest"
+      
+    - name: Push Docker image
+      command: docker push "{{ new_image_ }}{{ version }}"
+      
+    - name: Push Docker image
+      command: docker push "{{ image_registry }}/{{ image_name }}:latest"
+      
+    - name: Push Docker image
+      command: docker rmi "{{ new_image_ }}{{ version }}"  "{{ image_registry }}/{{ image_name }}:latest"   
